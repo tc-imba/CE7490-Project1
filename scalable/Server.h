@@ -61,6 +61,8 @@ public:
     int getId() const;
 
     const set<int> & getPrimaryNodes() const;
+
+    int computeInterServerCost() const;
 };
 
 

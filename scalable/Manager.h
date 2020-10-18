@@ -313,7 +313,17 @@ public:
         }
     }
 
+    int computeInterServerCost() {
+        int cost = 0;
+        for (auto &server : servers) {
+            cost += server->computeInterServerCost();
+        }
+        return cost;
+    }
+
+
     void run() {
+        int i = 0;
         for (auto node = graph->BegNI(); node != graph->EndNI(); node++) {
             int nodeId = node.GetId();
             addNode(nodeId);
@@ -323,17 +333,15 @@ public:
             if (maxSCB > 0 && maxSCBServerId >= 0) {
                 reallocateNode(nodeId, maxSCB, maxSCBServerId);
             }
-
-
-//            cout << node.GetId() << " ";
-//            auto neighborNum = node.GetDeg();
-//            for (int i = 0; i < neighborNum; i++) {
-//                auto neighborId = node.GetNbrNId(i);
-//                cout << neighborId << " ";
-//            }
-//            cout << endl;
+            if (++i % 256 == 0) {
+                int cost = computeInterServerCost();
+                cout << i << " " << cost << endl;
+            }
         }
+        int cost = computeInterServerCost();
+        cout << i << " " << cost << endl;
     }
+
 };
 
 #endif //SOCIAL_NETWORK_MANAGER_H

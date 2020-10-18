@@ -50,3 +50,7 @@ int Server::getId() const {
 const set<int> &Server::getPrimaryNodes() const {
     return primaryNodes;
 }
+
+int Server::computeInterServerCost() const {
+    return graph->GetNodes() - (int) primaryNodes.size();
+}
