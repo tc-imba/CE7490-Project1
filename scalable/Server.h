@@ -20,6 +20,8 @@ public:
         NON_PRIMARY,
     };
 
+    const static char *NodeTypeString[3];
+
     struct Node {
         NodeType type;
 
@@ -63,6 +65,8 @@ public:
     const set<int> & getPrimaryNodes() const;
 
     int computeInterServerCost() const;
+
+    void validate();
 };
 
 

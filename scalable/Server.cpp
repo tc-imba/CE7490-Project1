@@ -5,8 +5,14 @@
 #include "Server.h"
 #include "Manager.h"
 
+const char *Server::NodeTypeString[3] = {
+        "PRIMARY",
+        "VIRTUAL_PRIMARY",
+        "NON_PRIMARY",
+};
 
 void Server::addNode(int nodeId, NodeType type) {
+    cout << "server " << id << ": add node " << nodeId << " (" << NodeTypeString[(int) type] << ")" << endl;
     if (type == NodeType::PRIMARY) {
         primaryNodes.emplace(nodeId);
     }
@@ -24,6 +30,7 @@ Server::Node &Server::getNode(int nodeId) {
 
 void Server::removeNode(int nodeId) {
     auto &node = getNode(nodeId);
+    cout << "server " << id << ": remove node " << nodeId << " (" << NodeTypeString[(int) node.type] << ")" << endl;
     if (node.type == NodeType::PRIMARY) {
         primaryNodes.erase(nodeId);
     }
@@ -53,4 +60,29 @@ const set<int> &Server::getPrimaryNodes() const {
 
 int Server::computeInterServerCost() const {
     return graph->GetNodes() - (int) primaryNodes.size();
+}
+
+void Server::validate() {
+    for (auto node = graph->BegNI(); node != graph->EndNI(); node++) {
+        auto neighborNum = node.GetDeg();
+        for (int i = 0; i < neighborNum; i++) {
+            auto neighborId = node.GetNbrNId(i);
+            const auto &neighbor = ((const TNodeNet<Node> *) graph())->GetNode(neighborId);
+            bool flag = false;
+            if (neighbor.GetDat().type == NodeType::NON_PRIMARY) {
+                auto neighborNeighborNum = neighbor.GetDeg();
+                for (int j = 0; j < neighborNeighborNum; j++) {
+                    auto neighborNeighborId = neighbor.GetNbrNId(j);
+                    if (graph->GetNDat(neighborNeighborId).type == NodeType::PRIMARY) {
+                        flag = true;
+                        break;
+                    }
+                }
+            }
+            if (!flag) {
+                cout << "validation failed" << endl;
+                exit(-1);
+            }
+        }
+    }
 }

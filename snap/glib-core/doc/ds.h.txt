@@ -181,7 +181,7 @@ The pool can store up to 2G different vectors, each with up to 2G elements. Each
 ///
 
 /// TVecPool::TVecPool
-@param ExpectVals At creation the pool allocates enough memory for storing the total of \c ExpectVals elements (not vectors).
+@param ExpectVals At creation the pool allocates enough memory for storing the value of \c ExpectVals elements (not vectors).
 @param _GrowBy  Whenever the size of the pool needs to be expanded, it will be expanded to be able to store additional \c _GrowBy elements.
 @param _FastCopy If \c true, then vectors are copied using \c memcpy(), otherwise the assignment operator is used for copying. This option is slower but useful for complex objects where assignment operator is non-trivial.
 @param _EmptyVal Empty (not yet used) elements in the pool are assigned to this value. By default <tt>_EmptyVal = TVal()</tt>.
