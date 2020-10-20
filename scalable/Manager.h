@@ -140,8 +140,9 @@ public:
         for (++it; node.GetDat().virtualPrimaryServerIds.size() < virtualPrimaryNum; ++it) {
             node.GetDat().virtualPrimaryServerIds.emplace_back((*it)->getId());
         }
-
-        cout << "--- add node " << nodeId << " (" << primaryServer->getId() <<  ") ---" << endl;
+#ifndef NDEBUG
+        //        cout << "--- add node " << nodeId << " (" << primaryServer->getId() <<  ") ---" << endl;
+#endif
         primaryServer->addNode(nodeId, Server::NodeType::PRIMARY);
         for (auto virtualPrimaryServerId : node.GetDat().virtualPrimaryServerIds) {
             auto virtualPrimaryServer = servers[virtualPrimaryServerId].get();
@@ -158,8 +159,9 @@ public:
     pair<int, int> moveNode(int nodeId, int serverBId) {
         auto &node = getNode(nodeId);
         int serverAId = node.GetDat().primaryServerId;
-        cout << "--- move node " << nodeId << " (" << serverAId << " -> " << serverBId << ") ---" << endl;
-
+#ifndef NDEBUG
+        //        cout << "--- move node " << nodeId << " (" << serverAId << " -> " << serverBId << ") ---" << endl;
+#endif
         auto serverA = servers[serverAId].get();
         auto serverB = servers[serverBId].get();
 
@@ -258,25 +260,42 @@ public:
         return true;
     }
 
-    SCBValue calculateSCB(int nodeId, int serverBId) {
+    SCBValue calculateSCB(int nodeId, int serverBId, vector<int> &PDSNs, int totalPDSN) {
         auto &node = getNode(nodeId);
         auto neighborNum = node.GetDeg();
         int serverAId = node.GetDat().primaryServerId;
         assert(serverAId != serverBId);
+        auto serverA = servers[serverAId].get();
+        auto serverB = servers[serverBId].get();
 
         SCBValue SCB;
+
+        SCB.PDSN_B += PDSNs[serverBId];
+        SCB.PDSN_AB += totalPDSN - PDSNs[serverAId] - PDSNs[serverBId];
+
+        // if serverB has virtual primary nodeA, they will be swapped
+        // so serverA has one more virtual primary node (penalty = -1)
+        // and serverB has one less virtual primary node (bonus = 1)
+        if (serverB->hasNode(nodeId) && serverB->getNode(nodeId).type == Server::NodeType::VIRTUAL_PRIMARY) {
+            SCB.penalty = -1;
+            SCB.bonus = 1;
+        }
+
         for (int i = 0; i < neighborNum; i++) {
             auto neighborId = node.GetNbrNId(i);
             assert(graph->IsEdge(nodeId, neighborId) || graph->IsEdge(neighborId, nodeId));
             auto &neighbor = getNode(neighborId);
             int neighborServerId = neighbor.GetDat().primaryServerId;
+
             if (neighborServerId >= 0) {
-                if (neighborServerId == serverBId) {
+                /*if (!PDSNs && neighborServerId == serverBId &&
+                    serverA->getNode(neighborId).type == Server::NodeType::NON_PRIMARY) {
                     SCB.PDSN_B += (int) isPDSN(node, neighbor);
                 }
-                if (neighborServerId != serverAId && neighborServerId != serverBId) {
+                if (!PDSNs && neighborServerId != serverAId && neighborServerId != serverBId &&
+                    serverA->getNode(neighborId).type == Server::NodeType::NON_PRIMARY) {
                     SCB.PDSN_AB += (int) isPDSN(node, neighbor);
-                }
+                }*/
                 if (neighborServerId == serverAId) {
                     SCB.PSSN += (int) isPSSN(node, neighbor, serverBId);
                 }
@@ -291,6 +310,7 @@ public:
                 }
             }
         }
+
         SCB.value = SCB.PDSN_B + SCB.PDSN_AB - SCB.PSSN - SCB.DSN_AB + SCB.bonus + SCB.penalty;
         return SCB;
     }
@@ -300,28 +320,34 @@ public:
         auto neighborNum = node.GetDeg();
         int serverAId = node.GetDat().primaryServerId;
         assert(targetServer != serverAId);
+        auto serverA = servers[serverAId].get();
 
-/*        vector<SNValue> values(servers.size());
-        int SSN = 0;
-        int PSSN = 0;
-        SNValue total;
+        vector<int> PDSNs(servers.size());
+        int totalPDSN = 0;
+//        int SSN = 0;
+//        int PSSN = 0;
+//        SNValue total;
 
         for (int i = 0; i < neighborNum; i++) {
             auto neighborId = node.GetNbrNId(i);
-            assert(graph->IsEdge(nodeId, neighborId) || graph->IsEdge(neighborId, nodeId));
+//            assert(graph->IsEdge(nodeId, neighborId) || graph->IsEdge(neighborId, nodeId));
             auto &neighbor = getNode(neighborId);
             int serverBId = neighbor.GetDat().primaryServerId;
             if (serverBId >= 0) {
-                int DSN = (int) isDSN(node, neighbor);
-                int PDSN = (int) isPDSN(node, neighbor);
-                values[serverBId].DSN += DSN;
-                values[serverBId].PDSN += PDSN;
-                SSN += (int) isSSN(node, neighbor);
-                PSSN += (int) isPSSN(node, neighbor);
-                total.DSN += DSN;
-                total.PDSN += PDSN;
+                if (serverA->getNode(neighborId).type == Server::NodeType::NON_PRIMARY && isPDSN(node, neighbor))  {
+                    PDSNs[serverBId] += 1;
+                    totalPDSN += 1;
+                }
+//                int DSN = (int) isDSN(node, neighbor);
+//                int PDSN = (int) isPDSN(node, neighbor);
+//                values[serverBId].DSN += DSN;
+//                values[serverBId].PDSN += PDSN;
+//                SSN += (int) isSSN(node, neighbor);
+//                PSSN += (int) isPSSN(node, neighbor);
+//                total.DSN += DSN;
+//                total.PDSN += PDSN;
             }
-        }*/
+        }
 
         int maxSCBServerId = serverAId;
         SCBValue maxSCB;
@@ -329,7 +355,7 @@ public:
         int serverBId = targetServer >= 0 ? targetServer : 0;
         for (; serverBId < servers.size(); serverBId++) {
             if (serverBId == serverAId) continue;
-            SCBValue SCB = calculateSCB(nodeId, serverBId);
+            SCBValue SCB = calculateSCB(nodeId, serverBId, PDSNs, totalPDSN);
 /*//            int SCB = 0;
             SCB.PDSN_B = values[serverBId].PDSN;
             SCB.PDSN_AB = total.PDSN - values[serverAId].PDSN - values[serverBId].PDSN;
@@ -353,8 +379,9 @@ public:
         auto &node = getNode(nodeId);
         int serverAId = node.GetDat().primaryServerId;
         assert(serverAId != serverBId);
-        cout << "--- reallocate node " << nodeId << " (" << serverAId << " -> " << serverBId << ") ---" << endl;
-
+#ifndef NDEBUG
+        //        cout << "--- reallocate node " << nodeId << " (" << serverAId << " -> " << serverBId << ") ---" << endl;
+#endif
         auto serverA = servers[serverAId].get();
         auto serverB = servers[serverBId].get();
         assert(serverA->getNode(nodeId).type == Server::NodeType::PRIMARY);
@@ -366,19 +393,17 @@ public:
             ++serverBLoad;
         }
 
-        int cost1 = computeInterServerCost();
+//        int cost1 = computeInterServerCost();
 
         if (abs(serverALoad - serverBLoad) <= loadConstraint) {
             // The node is moved to Server B if it would not violate the
             // load balance constraint.
             auto p1 = moveNode(nodeId, serverBId);
 
-            int cost2 = computeInterServerCost();
-//            if (cost1 < cost2) {
+/*            int cost2 = computeInterServerCost();
             cout << "move " << cost1 - cost2 << " " << SCB.value << endl;
             cout << SCB.PDSN_AB << " " << SCB.PDSN_B << " " << -SCB.penalty << " " << p1.first << endl;
-            cout << SCB.DSN_AB << " " << SCB.PSSN << " " << -SCB.bonus << " " << p1.second << endl;
-//            }
+            cout << SCB.DSN_AB << " " << SCB.PSSN << " " << -SCB.bonus << " " << p1.second << endl;*/
 
         } else {
             // Otherwise, the algorithm tries to swap the node vi with
@@ -389,7 +414,8 @@ public:
             SCBValue maxSCB;
             maxSCB.value = numeric_limits<int>::min();;
             for (auto serverBNodeId : serverB->getPrimaryNodes()) {
-                SCBValue tempSCB = calculateSCB(serverBNodeId, serverAId);
+                auto p = findMaxSCB(serverBNodeId, serverAId);
+                SCBValue tempSCB = p.first;
                 if (tempSCB.value > maxSCB.value) {
                     maxSCB = tempSCB;
                     maxSCBNodeId = serverBNodeId;
@@ -405,8 +431,7 @@ public:
             } else {
                 p2 = moveNode(nodeId, serverAId);
             }
-            int cost2 = computeInterServerCost();
-//            if (cost1 < cost2) {
+/*            int cost2 = computeInterServerCost();
             if (maxSCBNodeId >= 0 && SCB.value + maxSCB.value > 0) {
                 cout << "swap " << cost1 << " " << cost2 << " " << SCB.value << " " << maxSCB.value << endl;
                 cout << SCB.PDSN_AB << " " << SCB.PDSN_B << " " << SCB.penalty << " " << p1.first << endl;
@@ -416,8 +441,7 @@ public:
             } else {
                 cout << "move back " << cost1 << " " << cost2 << " " << SCB.value << " " << maxSCB.value << endl;
             }
-            move(0);
-//            }
+            move(0);*/
         }
 
 

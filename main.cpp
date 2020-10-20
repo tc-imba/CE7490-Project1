@@ -13,7 +13,7 @@ int main() {
 //    graph->GetNodes();
 //    cout << graph->GetNodes() << endl;
 
-    Manager manager(128, 0, 1);
+    Manager manager(128, 3, 1);
     manager.run();
 
     return 0;

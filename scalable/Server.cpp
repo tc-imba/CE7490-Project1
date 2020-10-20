@@ -12,7 +12,9 @@ const char *Server::NodeTypeString[3] = {
 };
 
 void Server::addNode(int nodeId, NodeType type) {
-    cout << "server " << id << ": add node " << nodeId << " (" << NodeTypeString[(int) type] << ")" << endl;
+#ifndef NDEBUG
+//    cout << "server " << id << ": add node " << nodeId << " (" << NodeTypeString[(int) type] << ")" << endl;
+#endif
     if (type == NodeType::PRIMARY) {
         primaryNodes.emplace(nodeId);
     }
@@ -30,7 +32,9 @@ Server::Node &Server::getNode(int nodeId) {
 
 void Server::removeNode(int nodeId) {
     auto &node = getNode(nodeId);
-    cout << "server " << id << ": remove node " << nodeId << " (" << NodeTypeString[(int) node.type] << ")" << endl;
+#ifndef NDEBUG
+//    cout << "server " << id << ": remove node " << nodeId << " (" << NodeTypeString[(int) node.type] << ")" << endl;
+#endif
     if (node.type == NodeType::PRIMARY) {
         primaryNodes.erase(nodeId);
     }
