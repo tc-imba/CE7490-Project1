@@ -11,17 +11,17 @@
 #include <iostream>
 #include <cassert>
 #include <limits>
+#include <random>
 
 using namespace std;
 
 class Manager {
 public:
     struct Node {
-        TInt primaryServerId = -1;
+        int primaryServerId = -1;
         std::vector<int> virtualPrimaryServerIds;
 
-        void Save(TSOut &SOut) const {
-        }
+        void Save(TSOut &SOut) const { }
     };
 
     struct SNValue {
@@ -45,14 +45,37 @@ private:
     vector<unique_ptr<Server> > servers;
     set<Server *, Server::Compare> serverSet;
     TPt<Graph> graph;
+    vector<int> allNodes;
     size_t virtualPrimaryNum;
     int loadConstraint;
 public:
-    explicit Manager(size_t serverNum, size_t virtualPrimaryNum, int loadConstraint)
+    explicit Manager(const string &dataFile, size_t serverNum, size_t virtualPrimaryNum, int loadConstraint)
             : virtualPrimaryNum(virtualPrimaryNum), loadConstraint(loadConstraint) {
         assert(serverNum > virtualPrimaryNum);
 
-        graph = TSnap::LoadEdgeList<TPt<TNodeNet<Node> > >("data/facebook.txt", 0, 1);
+        // initialize (maybe) directed graph as undirected graph
+        graph = Graph::New();
+
+        TPt<TUNGraph> rawGraph = TSnap::LoadEdgeList<TPt<TUNGraph>>(dataFile.c_str(), 0, 1);
+        for (auto node = rawGraph->BegNI(); node != rawGraph->EndNI(); node++) {
+            int nodeId = node.GetId();
+            graph->AddNode(nodeId);
+            allNodes.emplace_back(nodeId);
+        }
+        for (auto node = rawGraph->BegNI(); node != rawGraph->EndNI(); node++) {
+            auto neighborNum = node.GetDeg();
+            for (int i = 0; i < neighborNum; i++) {
+                int nodeAId = node.GetId();
+                int nodeBId = node.GetNbrNId(i);
+                if (nodeAId == nodeBId) continue;
+                if (nodeAId > nodeBId) swap(nodeAId, nodeBId);
+                if (!graph->IsEdge(nodeAId, nodeBId)) {
+                    graph->AddEdge(nodeAId, nodeBId);
+                }
+            }
+        }
+
+//        graph = TSnap::LoadEdgeList<TPt<Graph>>(dataFile.c_str(), 0, 1);
 
         for (std::size_t i = 0; i < serverNum; i++) {
             auto server = make_unique<Server>(i, this);
@@ -73,6 +96,10 @@ public:
         const Graph *g = graph();
         const auto &node = g->GetNode(nodeId);
         return const_cast<GraphNode &>(node);
+    }
+
+    bool isEdge(int nodeAId, int nodeBId) {
+        return graph->IsEdge(nodeAId, nodeBId) || graph->IsEdge(nodeBId, nodeAId);
     }
 
     pair<int, int> ensureLocality(int nodeId, int neighborId) {
@@ -334,7 +361,7 @@ public:
             auto &neighbor = getNode(neighborId);
             int serverBId = neighbor.GetDat().primaryServerId;
             if (serverBId >= 0) {
-                if (serverA->getNode(neighborId).type == Server::NodeType::NON_PRIMARY && isPDSN(node, neighbor))  {
+                if (serverA->getNode(neighborId).type == Server::NodeType::NON_PRIMARY && isPDSN(node, neighbor)) {
                     PDSNs[serverBId] += 1;
                     totalPDSN += 1;
                 }
@@ -375,7 +402,7 @@ public:
         return make_pair(maxSCB, maxSCBServerId);
     }
 
-    void reallocateNode(int nodeId, SCBValue SCB, int serverBId) {
+    void _reallocateNode(int nodeId, SCBValue SCB, int serverBId) {
         auto &node = getNode(nodeId);
         int serverAId = node.GetDat().primaryServerId;
         assert(serverAId != serverBId);
@@ -444,6 +471,10 @@ public:
             move(0);*/
         }
 
+//        int cost2 = computeInterServerCost();
+//        if (cost1 < cost2) {
+//            cout << cost1 << " " << cost2 << endl;
+//        }
 
     }
 
@@ -461,31 +492,48 @@ public:
         return cost;
     }
 
+    void reallocateNode(int nodeId) {
+        auto p = findMaxSCB(nodeId);
+        SCBValue maxSCB = p.first;
+        int maxSCBServerId = p.second;
+        if (maxSCB.value > 0 && maxSCBServerId >= 0) {
+            _reallocateNode(nodeId, maxSCB, maxSCBServerId);
+        }
+    }
 
-    void run() {
-        int i = 0;
+    void mergeNodes() {
+
+
+    }
+
+    void run(bool random = false) {
         for (auto node = graph->BegNI(); node != graph->EndNI(); node++) {
             int nodeId = node.GetId();
             addNode(nodeId);
 //            validate();
 
             // offline algorithm
-            auto p = findMaxSCB(nodeId);
-            SCBValue maxSCB = p.first;
-            int maxSCBServerId = p.second;
-            if (maxSCB.value > 0 && maxSCBServerId >= 0) {
-                reallocateNode(nodeId, maxSCB, maxSCBServerId);
+            if (!random) {
+                reallocateNode(nodeId);
             }
 //            validate();
-
-
-/*            if (++i % 256 == 0) {
-                int cost = computeInterServerCost();
-                cout << i << " " << cost << endl;
-            }*/
         }
         int cost = computeInterServerCost();
-        cout << i << " " << cost << endl;
+        cout << cost << endl;
+
+        // node relocation and swapping
+        mt19937 randomGenerator;
+        uniform_int_distribution<> intDistribution(0, allNodes.size() - 1);
+        for (int eta = 0; eta < 10; eta++) {
+            for (int i = 0; i < allNodes.size(); i++) {
+                int nodeId = allNodes[intDistribution(randomGenerator)];
+                reallocateNode(nodeId);
+            }
+
+            cost = computeInterServerCost();
+            cout << cost << endl;
+        }
+
     }
 
 };

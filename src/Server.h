@@ -31,6 +31,15 @@ public:
         }
     };
 
+    struct MergedNode {
+        std::set<int> nodeIds;
+        bool processed = false;
+        int primaryServerId = -1;
+        int groupId = -1;
+
+        void Save(TSOut& SOut) const { }
+    };
+
 private:
     TPt<TNodeNet<Node> > graph;
     set<int> primaryNodes;
@@ -53,6 +62,8 @@ public:
     void addNode(int nodeId, NodeType type);
 
     Node &getNode(int nodeId);
+
+    void mergeNodes();
 
     void removeNode(int nodeId);
 

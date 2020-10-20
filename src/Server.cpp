@@ -13,7 +13,7 @@ const char *Server::NodeTypeString[3] = {
 
 void Server::addNode(int nodeId, NodeType type) {
 #ifndef NDEBUG
-//    cout << "server " << id << ": add node " << nodeId << " (" << NodeTypeString[(int) type] << ")" << endl;
+    //    cout << "server " << id << ": add node " << nodeId << " (" << NodeTypeString[(int) type] << ")" << endl;
 #endif
     if (type == NodeType::PRIMARY) {
         primaryNodes.emplace(nodeId);
@@ -30,10 +30,34 @@ Server::Node &Server::getNode(int nodeId) {
     return graph->GetNDat(nodeId);
 }
 
+void Server::mergeNodes() {
+    TPt<TNodeNet<Node> > mergeGraph = TNodeNet<Node>::New();
+    set<int> unprocessed;
+    for (auto nodeId : primaryNodes) {
+        mergeGraph->AddNode(nodeId);
+        unprocessed.emplace(nodeId);
+    }
+    for (auto nodeId : primaryNodes) {
+        auto &node = manager->getNode(nodeId);
+        auto neighborNum = node.GetDeg();
+        for (int i = 0; i < neighborNum; i++) {
+            auto neighborId = node.GetNbrNId(neighborNum);
+            if (mergeGraph->IsNode(neighborId) && !mergeGraph->IsEdge(nodeId, neighborId)) {
+                mergeGraph->AddEdge(nodeId, neighborId);
+            }
+        }
+    }
+    while (!unprocessed.empty()) {
+
+    }
+
+}
+
+
 void Server::removeNode(int nodeId) {
     auto &node = getNode(nodeId);
 #ifndef NDEBUG
-//    cout << "server " << id << ": remove node " << nodeId << " (" << NodeTypeString[(int) node.type] << ")" << endl;
+    //    cout << "server " << id << ": remove node " << nodeId << " (" << NodeTypeString[(int) node.type] << ")" << endl;
 #endif
     if (node.type == NodeType::PRIMARY) {
         primaryNodes.erase(nodeId);

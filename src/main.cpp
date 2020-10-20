@@ -1,4 +1,4 @@
-#include "scalable/Manager.h"
+#include "Manager.h"
 
 #include <Snap.h>
 #include <iostream>
@@ -13,7 +13,8 @@ int main() {
 //    graph->GetNodes();
 //    cout << graph->GetNodes() << endl;
 
-    Manager manager(128, 3, 1);
+    string dataFile = "data/facebook.txt";
+    Manager manager(dataFile, 128, 3, 1);
     manager.run();
 
     return 0;
