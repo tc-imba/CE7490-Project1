@@ -7,6 +7,7 @@
 
 #include <Snap.h>
 #include <set>
+#include <random>
 
 using namespace std;
 
@@ -31,21 +32,14 @@ public:
         }
     };
 
-    struct MergedNode {
-        std::set<int> nodeIds;
-        bool processed = false;
-        int primaryServerId = -1;
-        int groupId = -1;
-
-        void Save(TSOut& SOut) const { }
-    };
-
 private:
     TPt<TNodeNet<Node> > graph;
-    set<int> primaryNodes;
+    set<int> primaryNodes, virtualPrimaryNodes;
     int id;
     int load = 0;
     Manager *manager;
+    set<int> singleNodes;
+    vector<vector<int> > groupedNodes;
 
 public:
     struct Compare {
@@ -63,7 +57,7 @@ public:
 
     Node &getNode(int nodeId);
 
-    void mergeNodes();
+    void mergeNodes(mt19937 &generator);
 
     void removeNode(int nodeId);
 
@@ -75,9 +69,15 @@ public:
 
     const set<int> & getPrimaryNodes() const;
 
+    const set<int> & getVirtualPrimaryNodes() const;
+
     int computeInterServerCost() const;
 
     void validate();
+
+    set<int> &getSingleNodes();
+
+    vector<vector<int> > &getGroupedNodes();
 };
 
 

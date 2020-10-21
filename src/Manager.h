@@ -19,9 +19,9 @@ class Manager {
 public:
     struct Node {
         int primaryServerId = -1;
-        std::vector<int> virtualPrimaryServerIds;
+        vector<int> virtualPrimaryServerIds;
 
-        void Save(TSOut &SOut) const { }
+        void Save(TSOut &SOut) const {}
     };
 
     struct SNValue {
@@ -41,6 +41,15 @@ public:
 
     typedef TNodeNet<Node> Graph;
     typedef Graph::TNode GraphNode;
+    typedef vector<int> MergedNode;
+
+    struct MergedNodeCompare {
+        bool operator()(const MergedNode &a, const MergedNode &b) {
+            if (a.size() != b.size()) return a.size() > b.size();
+            return a[0] < b[0];
+        }
+    };
+
 private:
     vector<unique_ptr<Server> > servers;
     set<Server *, Server::Compare> serverSet;
@@ -48,6 +57,10 @@ private:
     vector<int> allNodes;
     size_t virtualPrimaryNum;
     int loadConstraint;
+
+    set<MergedNode, MergedNodeCompare> mergedNodes;
+    mt19937 randomGenerator;
+
 public:
     explicit Manager(const string &dataFile, size_t serverNum, size_t virtualPrimaryNum, int loadConstraint)
             : virtualPrimaryNum(virtualPrimaryNum), loadConstraint(loadConstraint) {
@@ -56,7 +69,7 @@ public:
         // initialize (maybe) directed graph as undirected graph
         graph = Graph::New();
 
-        TPt<TUNGraph> rawGraph = TSnap::LoadEdgeList<TPt<TUNGraph>>(dataFile.c_str(), 0, 1);
+        auto rawGraph = TSnap::LoadEdgeList<TPt<TUNGraph>>(dataFile.c_str(), 0, 1);
         for (auto node = rawGraph->BegNI(); node != rawGraph->EndNI(); node++) {
             int nodeId = node.GetId();
             graph->AddNode(nodeId);
@@ -77,7 +90,7 @@ public:
 
 //        graph = TSnap::LoadEdgeList<TPt<Graph>>(dataFile.c_str(), 0, 1);
 
-        for (std::size_t i = 0; i < serverNum; i++) {
+        for (size_t i = 0; i < serverNum; i++) {
             auto server = make_unique<Server>(i, this);
             serverSet.emplace(server.get());
             servers.emplace_back(move(server));
@@ -501,38 +514,206 @@ public:
         }
     }
 
-    void mergeNodes() {
-
-
+    bool tryReBalance(int serverAId, int serverBId, int originCost) {
+        auto serverA = servers[serverAId].get();
+        auto serverB = servers[serverBId].get();
+        int loadDiff = serverA->getLoad() - serverB->getLoad();
+        int newCost = serverA->computeInterServerCost() + serverB->computeInterServerCost();
+        // return false if new cost is even larger
+        if (newCost >= originCost) {
+            return false;
+        }
+        // return true if already balanced
+        if (-loadConstraint <= loadDiff && loadDiff <= loadConstraint) {
+            return true;
+        }
+        // ensure we're moving from A to B
+        if (loadDiff < 0) {
+            swap(serverAId, serverBId);
+            swap(serverA, serverB);
+        }
+        auto singleNodes = serverA->getSingleNodes();
+        // if server B have virtual primary, moving it have no effect on load
+        for (auto it = singleNodes.begin(); it != singleNodes.end();) {
+            auto nodeId = *it;
+            if (serverB->hasNode(nodeId) && serverB->getNode(nodeId).type == Server::NodeType::VIRTUAL_PRIMARY) {
+                it = singleNodes.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        vector<int> movedNodes;
+        while (!singleNodes.empty()) {
+            int maxSCBNodeId = -1;
+            SCBValue maxSCB;
+            maxSCB.value = numeric_limits<int>::min();
+            for (auto nodeId : singleNodes) {
+                auto p = findMaxSCB(nodeId, serverBId);
+                if (p.first.value > maxSCB.value) {
+                    maxSCB = p.first;
+                    maxSCBNodeId = nodeId;
+                }
+            }
+            if (originCost - newCost + maxSCB.value > 0) {
+                movedNodes.emplace_back(maxSCBNodeId);
+                singleNodes.erase(maxSCBNodeId);
+                moveNode(maxSCBNodeId, serverBId);
+                newCost = serverA->computeInterServerCost() + serverB->computeInterServerCost();
+            } else break;
+        }
+        // examine the result
+        loadDiff = serverA->getLoad() - serverB->getLoad();
+        newCost = serverA->computeInterServerCost() + serverB->computeInterServerCost();
+        if (-loadConstraint <= loadDiff && loadDiff <= loadConstraint && newCost < originCost) {
+            // update the single nodes
+            for (auto nodeId : movedNodes) {
+                serverA->getSingleNodes().erase(nodeId);
+                serverB->getSingleNodes().emplace(nodeId);
+            }
+//            cout << "rebalance move " << movedNodes.size() << " nodes from server " << serverAId << " to " << serverBId;
+//            cout << ", cost " << originCost << " -> " << newCost << endl;
+            return true;
+        }
+        // if load balance failed, reverse the operations
+        for (auto nodeId : movedNodes) {
+            moveNode(nodeId, serverAId);
+        }
+//        cout << "rebalance failed" << endl;
+        return false;
     }
+
+    void mergeNodes() {
+        for (auto &server : servers) {
+            server->mergeNodes(randomGenerator);
+            int serverId = server->getId();
+            auto &groupedNodes = server->getGroupedNodes();
+            for (auto &nodeIds : groupedNodes) {
+                mergedNodes.emplace(nodeIds);
+            }
+        }
+        int count = 0;
+        for (auto itA = mergedNodes.begin(); itA != mergedNodes.end(); ++itA) {
+            int serverAId = getNode(itA->front()).GetDat().primaryServerId;
+            auto serverA = servers[serverAId].get();
+
+            auto itB = itA;
+            while (++itB != mergedNodes.end()) {
+                if (itA->size() - itB->size() > loadConstraint) break;
+                int serverBId = getNode(itB->front()).GetDat().primaryServerId;
+                if (serverAId == serverBId) break;
+                auto serverB = servers[serverBId].get();
+
+                int originCost = serverA->computeInterServerCost() + serverB->computeInterServerCost();
+                for (auto nodeId : *itA) {
+                    moveNode(nodeId, serverBId);
+                }
+                for (auto nodeId : *itB) {
+                    moveNode(nodeId, serverAId);
+                }
+                bool flag = tryReBalance(serverAId, serverBId, originCost);
+//                if (newCost < originCost) {
+//                    cout << "swap " << itA->size() << " nodes from server " << serverAId;
+//                    cout << " and " << itB->size() << " nodes from server " << serverBId;
+//                    cout << ", cost " << originCost << " -> " << newCost << endl;
+//                }
+                if (!flag) {
+                    for (auto nodeId : *itA) {
+                        moveNode(nodeId, serverAId);
+                    }
+                    for (auto nodeId : *itB) {
+                        moveNode(nodeId, serverBId);
+                    }
+                } else {
+                    ++count;
+                }
+            }
+        }
+    }
+
+    void getSwappableVirtualPrimary(int serverAId, int serverBId, vector<int> &nodes) {
+        auto serverA = servers[serverAId].get();
+        auto serverB = servers[serverBId].get();
+        for (auto nodeId : serverA->getVirtualPrimaryNodes()) {
+            if (serverB->hasNode(nodeId) && serverB->getNode(nodeId).type == Server::NodeType::NON_PRIMARY) {
+                auto &node = getNode(nodeId);
+                auto neighborNum = node.GetDeg();
+                bool flag = true;
+                for (int i = 0; i < neighborNum; i++) {
+                    int neighborId = node.GetNbrNId(i);
+                    if (getNode(neighborId).GetDat().primaryServerId == serverAId) {
+                        flag = false;
+                        break;
+                    }
+                }
+                if (flag) {
+                    nodes.emplace_back(nodeId);
+                }
+            }
+        }
+    }
+
 
     void run(bool random = false) {
         for (auto node = graph->BegNI(); node != graph->EndNI(); node++) {
             int nodeId = node.GetId();
             addNode(nodeId);
-//            validate();
 
             // offline algorithm
             if (!random) {
                 reallocateNode(nodeId);
             }
-//            validate();
         }
         int cost = computeInterServerCost();
         cout << cost << endl;
 
+        if (random) return;
+
+
+
         // node relocation and swapping
-        mt19937 randomGenerator;
         uniform_int_distribution<> intDistribution(0, allNodes.size() - 1);
         for (int eta = 0; eta < 10; eta++) {
             for (int i = 0; i < allNodes.size(); i++) {
                 int nodeId = allNodes[intDistribution(randomGenerator)];
                 reallocateNode(nodeId);
             }
-
             cost = computeInterServerCost();
             cout << cost << endl;
         }
+
+        // merge nodes
+        mergeNodes();
+        
+        cost = computeInterServerCost();
+        cout << cost << endl;
+
+        // virtual primary swapping
+        for (int serverAId = 0; serverAId < servers.size(); serverAId++) {
+            auto serverA = servers[serverAId].get();
+            for (int serverBId = 0; serverBId < servers.size(); serverBId++) {
+                if (serverAId == serverBId) continue;
+                auto serverB = servers[serverBId].get();
+                vector<int> nodesA, nodesB;
+                getSwappableVirtualPrimary(serverAId, serverBId, nodesA);
+                getSwappableVirtualPrimary(serverBId, serverAId, nodesB);
+                auto removeNum = min(nodesA.size(), nodesB.size());
+                for (int i = 0; i < removeNum; i++) {
+                    int nodeAId = nodesA[i];
+                    int nodeBId = nodesB[i];
+                    serverA->removeNode(nodeAId);
+                    serverA->removeNode(nodeBId);
+                    serverB->removeNode(nodeAId);
+                    serverB->removeNode(nodeBId);
+                    serverA->addNode(nodeBId, Server::NodeType::VIRTUAL_PRIMARY);
+                    serverB->addNode(nodeAId, Server::NodeType::VIRTUAL_PRIMARY);
+//                    cout << "server " << serverAId << " " << nodeAId << " (V) " << nodeBId << " (N), ";
+//                    cout << "server " << serverBId << " " << nodeBId << " (V) " << nodeAId << " (N)" << endl;
+                }
+            }
+        }
+
+        cost = computeInterServerCost();
+        cout << cost << endl;
 
     }
 

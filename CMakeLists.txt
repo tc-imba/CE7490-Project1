@@ -12,5 +12,5 @@ file(GLOB GLIB_CORE_FILES snap/glib-core/*.h snap/glib-core/*.cpp)
 add_library(snap snap/snap-core/Snap.cpp)
 
 
-add_executable(social_network src/main.cpp src/Manager.cpp src/Server.cpp)
+add_executable(social_network src/main.cpp src/Manager.cpp src/Server.cpp src/MergedGraph.cpp)
 target_link_libraries(social_network snap)
