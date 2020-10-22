@@ -16,7 +16,7 @@ const char *Server::NodeTypeString[3] = {
 
 void Server::addNode(int nodeId, NodeType type) {
 #ifndef NDEBUG
-    //    cout << "server " << id << ": add node " << nodeId << " (" << NodeTypeString[(int) type] << ")" << endl;
+//        cout << "server " << id << ": add node " << nodeId << " (" << NodeTypeString[(int) type] << ")" << endl;
 #endif
     if (type == NodeType::PRIMARY || type == NodeType::VIRTUAL_PRIMARY) {
         if (type == NodeType::PRIMARY) {
@@ -56,7 +56,7 @@ void Server::mergeNodes(mt19937 &generator) {
 void Server::removeNode(int nodeId) {
     auto &node = getNode(nodeId);
 #ifndef NDEBUG
-    //    cout << "server " << id << ": remove node " << nodeId << " (" << NodeTypeString[(int) node.type] << ")" << endl;
+//        cout << "server " << id << ": remove node " << nodeId << " (" << NodeTypeString[(int) node.type] << ")" << endl;
 #endif
     if (node.type == NodeType::PRIMARY || node.type == NodeType::VIRTUAL_PRIMARY) {
         if (node.type == NodeType::PRIMARY) {

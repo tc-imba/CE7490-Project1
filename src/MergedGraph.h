@@ -142,9 +142,9 @@ public:
 //            cout << "(";
             if (node.GetDat().nodeIds.size() == 1) {
                 singleNodes.emplace(node.GetDat().nodeIds[0]);
-            } else {
-                groupedNodes.emplace_back(node.GetDat().nodeIds);
             }
+            groupedNodes.emplace_back(node.GetDat().nodeIds);
+
 //            for (auto nodeId : node.GetDat().nodeIds) {
 //                cout << nodeId << " ";
 //            }
