@@ -12,16 +12,18 @@ struct Options {
     size_t serverNum = 128;
     size_t virtualPrimaryNum = 3;
     int loadConstraint = 1;
+    size_t nodeNum = 0;
 };
 
 Options parseOptions(int argc, char **argv) {
-    const static char *optstring = "d:a:s:k:l:";
+    const static char *optstring = "d:a:s:k:l:n:";
     const static option long_options[] = {
             {"data",      optional_argument, nullptr, 'd'},
             {"algorithm", optional_argument, nullptr, 'a'},
             {"server",    optional_argument, nullptr, 's'},
             {"replica",   optional_argument, nullptr, 'k'},
             {"load",      optional_argument, nullptr, 'l'},
+            {"node",      optional_argument, nullptr, 'n'},
             {nullptr, 0,                     nullptr, 0}
     };
     int opt, option_index = 0;
@@ -59,6 +61,9 @@ Options parseOptions(int argc, char **argv) {
             case 'l':
                 options.loadConstraint = (int) strtol(optarg, nullptr, 10);
                 break;
+            case 'n':
+                options.nodeNum = strtoul(optarg, nullptr, 10);
+                break;
             default:
                 std::cerr << "Unrecognized option" << std::endl;
                 assert(0);
@@ -71,7 +76,7 @@ int main(int argc, char *argv[]) {
     auto options = parseOptions(argc, argv);
 
     Manager manager(options.dataFile, options.algorithm, options.serverNum, options.virtualPrimaryNum,
-                    options.loadConstraint);
+                    options.loadConstraint, options.nodeNum);
     manager.run();
 
     return 0;

@@ -15,6 +15,7 @@
 #include <limits>
 #include <random>
 #include <algorithm>
+#include <chrono>
 
 using namespace std;
 
@@ -60,7 +61,7 @@ public:
     typedef vector<int> MergedNode;
 
     struct MergedNodeCompare {
-        bool operator()(const MergedNode &a, const MergedNode &b) {
+        bool operator()(const MergedNode &a, const MergedNode &b) const {
             if (a.size() != b.size()) return a.size() > b.size();
             return a[0] < b[0];
         }
@@ -79,9 +80,11 @@ private:
     mt19937 randomGenerator;
     Algorithm algorithm;
 
+    chrono::system_clock::time_point start;
+
 public:
     explicit Manager(const string &dataFile, Algorithm algorithm, size_t serverNum, size_t virtualPrimaryNum,
-                     int loadConstraint)
+                     int loadConstraint, size_t nodeNum)
             : algorithm(algorithm), virtualPrimaryNum(virtualPrimaryNum), loadConstraint(loadConstraint) {
         assert(serverNum > virtualPrimaryNum);
 
@@ -89,6 +92,19 @@ public:
         graph = Graph::New();
 
         rawGraph = TSnap::LoadEdgeList<TPt<TUNGraph>>(dataFile.c_str(), 0, 1);
+        if (nodeNum > 0) {
+            vector<int> removeNodeIds;
+            int currentNodeNum = 0;
+            for (auto node = rawGraph->BegNI(); node != rawGraph->EndNI(); node++) {
+                if (++currentNodeNum > nodeNum) {
+                    removeNodeIds.emplace_back(node.GetId());
+                }
+            }
+            for (auto nodeId : removeNodeIds) {
+                rawGraph->DelNode(nodeId);
+            }
+        }
+
         for (auto node = rawGraph->BegNI(); node != rawGraph->EndNI(); node++) {
             int nodeId = node.GetId();
             graph->AddNode(nodeId);
@@ -189,9 +205,11 @@ public:
             assert(serverB->getNode(nodeAId).type == Server::NodeType::VIRTUAL_PRIMARY);
             int virtualNumAfterRemove = nodeA.GetDat().virtualPrimaryNum - 1 +
                                         ((int) (SPAR.addToA.find(nodeAId) != SPAR.addToA.end()));
-            if (virtualNumAfterRemove >= virtualPrimaryNum) {
-                SPAR.removeFromB.emplace(nodeAId);
+            if (virtualNumAfterRemove < virtualPrimaryNum) {
+                assert(SPAR.addToA.empty());
+                SPAR.addToA.emplace(nodeAId);
             }
+            SPAR.removeFromB.emplace(nodeAId);
         }
 
         SPAR.serverADelta = ((int) SPAR.addToA.size()) - ((int) SPAR.removeFromA.size()) - 1;
@@ -413,7 +431,7 @@ public:
     }
 
     // is vi Same Side Neighbor of vj
-    bool isSSN(GraphNode &vj, GraphNode &vi) {
+    static bool isSSN(GraphNode &vj, GraphNode &vi) {
         return vj.GetDat().primaryServerId == vi.GetDat().primaryServerId;
     }
 
@@ -432,7 +450,7 @@ public:
     }
 
     // is vi Different Side Neighbor of vj
-    bool isDSN(GraphNode &vj, GraphNode &vi) {
+    static bool isDSN(GraphNode &vj, GraphNode &vi) {
         return vj.GetDat().primaryServerId != vi.GetDat().primaryServerId;
     }
 
@@ -615,7 +633,7 @@ public:
 
             int maxSCBNodeId = -1;
             SCBValue maxSCB;
-            maxSCB.value = numeric_limits<int>::min();;
+            maxSCB.value = numeric_limits<int>::min();
             for (auto serverBNodeId : serverB->getPrimaryNodes()) {
                 auto p = findMaxSCB(serverBNodeId, serverAId);
                 SCBValue tempSCB = p.first;
@@ -665,6 +683,14 @@ public:
         for (auto &server : servers) {
             cost += server->computeInterServerCost();
         }
+        return cost;
+    }
+
+    int printCostAndTime() {
+        int cost = computeInterServerCost();
+        auto end = chrono::system_clock::now();
+        auto time = chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        cout << cost << "," << time << endl;
         return cost;
     }
 
@@ -889,8 +915,8 @@ public:
             }
         }
 
-        int cost = computeInterServerCost();
-        cout << cost << endl;
+        printCostAndTime();
+
     }
 
     void runMetis() {
@@ -933,8 +959,8 @@ public:
         assert(adjncy.size() == nEdges * 2);
 
         int ret = METIS_PartGraphKway(&nVertices, &nWeights, xadj.data(), adjncy.data(),
-                                      NULL, NULL, NULL, &nParts, NULL,
-                                      NULL, NULL, &objval, part.data());
+                                      nullptr, nullptr, nullptr, &nParts, nullptr,
+                                      nullptr, nullptr, &objval, part.data());
 
         for (auto node = graph->BegNI(); node != graph->EndNI(); node++) {
             int nodeId = node.GetId();
@@ -944,13 +970,6 @@ public:
             server->addNode(nodeId, Server::NodeType::PRIMARY);
             node.GetDat().primaryServerId = serverId;
         }
-
-        int cost = computeInterServerCost();
-        cout << cost << endl;
-
-/*        for (auto &server : servers) {
-            cout << server->getLoad() << endl;
-        }*/
 
         for (auto node = graph->BegNI(); node != graph->EndNI(); node++) {
             int nodeId = node.GetId();
@@ -967,13 +986,6 @@ public:
             }
             node.GetDat().virtualPrimaryNum = virtualPrimaryNum;
         }
-
-        cost = computeInterServerCost();
-        cout << cost << endl;
-
-/*        for (auto &server : servers) {
-            cout << server->getLoad() << endl;
-        }*/
 
         for (auto edge = rawGraph->BegEI(); edge != rawGraph->EndEI(); edge++) {
             int nodeId = edge.GetSrcNId();
@@ -997,37 +1009,12 @@ public:
             }
         }
 
-        cost = computeInterServerCost();
-        cout << cost << endl;
+        printCostAndTime();
 
-/*        for (auto &server : servers) {
-            cout << server->getLoad() << endl;
-        }*/
+        // virtual primary swapping
+        virtualPrimarySwapping();
 
-        /*for (auto node = graph->BegNI(); node != graph->EndNI(); node++) {
-            int nodeId = node.GetId();
-            int size = ((int) virtualPrimaryNum) - node.GetDat().virtualPrimaryNum;
-            while (size > 0) {
-                bool flag = false;
-                for (auto server: serverSet) {
-                    if (!server->hasNode(nodeId)) {
-                        server->addNode(nodeId, Server::NodeType::VIRTUAL_PRIMARY);
-                        node.GetDat().virtualPrimaryNum++;
-                        --size;
-                        flag = true;
-                        break;
-                    }
-                }
-                assert(flag);
-            }
-        }
-
-        cost = computeInterServerCost();
-        cout << cost << endl;
-
-        for (auto &server : servers) {
-            cout << server->getLoad() << endl;
-        }*/
+        printCostAndTime();
     }
 
     void runProposed(bool random = false, bool offline = true) {
@@ -1052,16 +1039,15 @@ public:
                 reallocateNode(nodeId);
             }
         }
-        int cost = computeInterServerCost();
-        cout << cost << endl;
+
+        int cost = printCostAndTime();
 
         if (random || !offline) return;
 
         // node relocation and swapping
         for (int eta = 0; eta < 10; eta++) {
             reallocateAndSwapNode();
-            int newCost = computeInterServerCost();
-            cout << newCost << endl;
+            int newCost = printCostAndTime();
             if (cost - newCost < 50) {
                 break;
             }
@@ -1071,17 +1057,16 @@ public:
         // merge nodes
         mergeNodes();
 
-        cost = computeInterServerCost();
-        cout << cost << endl;
+        printCostAndTime();
 
         // virtual primary swapping
         virtualPrimarySwapping();
 
-        cost = computeInterServerCost();
-        cout << cost << endl;
+        printCostAndTime();
     }
 
     void run() {
+        start = chrono::system_clock::now();
         switch (algorithm) {
             case Algorithm::RANDOM:
                 runProposed(true);

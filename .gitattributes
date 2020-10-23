@@ -1,0 +1,8 @@
+data/facebook.txt filter=lfs diff=lfs merge=lfs -text
+data/p2pgnutella.txt filter=lfs diff=lfs merge=lfs -text
+data/twitter.txt filter=lfs diff=lfs merge=lfs -text
+data/twittersample1.txt filter=lfs diff=lfs merge=lfs -text
+data/twittersample2.txt filter=lfs diff=lfs merge=lfs -text
+data/amazon.txt filter=lfs diff=lfs merge=lfs -text
+data/amazonsample.txt filter=lfs diff=lfs merge=lfs -text
+data/arxiv.txt filter=lfs diff=lfs merge=lfs -text
