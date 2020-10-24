@@ -90,7 +90,7 @@ async def run_large():
 
 
 async def main():
-    tasks = [run_large()]
+    tasks = [run_facebook(), run_small(), run_large()]
     await asyncio.gather(*tasks)
 
 
