@@ -64,9 +64,10 @@ async def run_program(data: str, algorithm: str, server: int, replica: int, node
 async def run_facebook():
     dataset = "facebook"
     tasks = []
-    for algorithm in ALGORITHMS:
-        tasks.append(run_program(dataset, algorithm, 128, 0))
-        tasks.append(run_program(dataset, algorithm, 128, 3))
+    for node in [256, 512, 1024, 2048]:
+        for algorithm in ALGORITHMS:
+            tasks.append(run_program(dataset, algorithm, 128, 0, node))
+            tasks.append(run_program(dataset, algorithm, 128, 3, node))
     await asyncio.gather(*tasks)
 
 
@@ -90,7 +91,7 @@ async def run_large():
 
 
 async def main():
-    tasks = [run_facebook(), run_small(), run_large()]
+    tasks = [run_facebook()]
     await asyncio.gather(*tasks)
 
 
