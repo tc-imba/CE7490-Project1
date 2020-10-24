@@ -22,7 +22,7 @@ def parse(filename):
             result = row
         if result:
             cost = str(row[0])
-            time = str(row[1])
+            time = str(float(row[1]) / 1000.)
         return [data, algorithm, server, replica, node, cost, time]
 
 
