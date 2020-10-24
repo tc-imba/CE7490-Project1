@@ -66,8 +66,9 @@ async def run_facebook():
     tasks = []
     for node in [256, 512, 1024, 2048]:
         for algorithm in ALGORITHMS:
-            tasks.append(run_program(dataset, algorithm, 128, 0, node))
-            tasks.append(run_program(dataset, algorithm, 128, 3, node))
+            # tasks.append(run_program(dataset, algorithm, 128, 0, node))
+            tasks.append(run_program(dataset, algorithm, 128, 2, node))
+            # tasks.append(run_program(dataset, algorithm, 128, 3, node))
     await asyncio.gather(*tasks)
 
 
