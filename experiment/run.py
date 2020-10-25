@@ -85,14 +85,15 @@ async def run_small():
 async def run_large():
     tasks = []
     for dataset in DATASETS_LARGE:
-        for algorithm in ALGORITHMS:
-            tasks.append(run_program(dataset, algorithm, 128, 0))
-            tasks.append(run_program(dataset, algorithm, 128, 2))
+        # for algorithm in ALGORITHMS:
+        algorithm = "offline"
+        tasks.append(run_program(dataset, algorithm, 128, 0))
+        tasks.append(run_program(dataset, algorithm, 128, 2))
     await asyncio.gather(*tasks)
 
 
 async def main():
-    tasks = [run_facebook()]
+    tasks = [run_large()]
     await asyncio.gather(*tasks)
 
 

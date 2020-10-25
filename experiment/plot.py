@@ -15,8 +15,8 @@ os.makedirs(plots_dir, exist_ok=True)
 
 pd.set_option("display.max_rows", None, "display.max_columns", None, 'display.width', None)
 
-# file_format = 'png'
-file_format = 'eps'
+file_format = 'png'
+# file_format = 'eps'
 
 PLOT_CONFIG = [
     ("random", "^"),

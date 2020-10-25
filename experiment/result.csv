@@ -1,8 +1,8 @@
 data,algorithm,server,replica,node,cost,time
 amazon,metis,128,0,0,160047,1.099
 amazon,metis,128,2,0,574820,13.424
-amazon,offline,128,0,0,243621,636.291
-amazon,offline,128,2,0,601502,772.943
+amazon,offline,128,0,0,243639,546.299
+amazon,offline,128,2,0,601642,580.554
 amazon,online,128,0,0,261214,287.139
 amazon,online,128,2,0,778499,288.28
 amazon,random,128,0,0,1728554,1.326
@@ -131,8 +131,8 @@ p2pgnutella,spar,128,2,0,62769,0.191
 p2pgnutella,spar,128,3,0,65275,0.152
 twitter,metis,128,0,0,246465,1.055
 twitter,metis,128,2,0,341204,4.897
-twitter,offline,128,0,0,247909,33771.062
-twitter,offline,128,2,0,384000,31611.56
+twitter,offline,128,0,0,249468,21631.278
+twitter,offline,128,2,0,327942,25492.353
 twitter,online,128,0,0,390226,2339.155
 twitter,online,128,2,0,518636,2749.648
 twitter,random,128,0,0,1899418,1.591

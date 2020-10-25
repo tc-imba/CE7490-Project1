@@ -1045,7 +1045,7 @@ public:
         if (random || !offline) return;
 
         // node relocation and swapping
-        for (int eta = 0; eta < 10; eta++) {
+        for (int eta = 0; eta < 5; eta++) {
             reallocateAndSwapNode();
             int newCost = printCostAndTime();
             if (cost - newCost < 50) {
